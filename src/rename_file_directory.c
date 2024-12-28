@@ -6,6 +6,16 @@
 #include <unistd.h> // UNIX sistem çağrıları, örn. access() ve remove()
 #include <errno.h> // Hata numaralarını ve hata mesajlarını işlemek için
 
+// Bir yolun dizin olup olmadığını kontrol eden fonksiyon
+bool is_directory(const char *path) {
+    struct stat path_stat; // Dosya/dizin durum bilgilerini tutmak için struct
+    if (stat(path, &path_stat) != 0) { // Dosya/dizinin durumunu al
+        perror("Stat failed"); // Hata durumunda mesaj yazdır
+        return false; // İşlem başarısız
+    }
+    return S_ISDIR(path_stat.st_mode); // Eğer bir dizinse true döner
+}
+
 // Basit kopyalama fonksiyonu
 bool copy(const char *source, const char *dest) {
     FILE *src = fopen(source, "rb"); // Kaynak dosyayı okuma modunda aç
