@@ -2,7 +2,7 @@
 #include <stdlib.h> // Standart kütüphane, genel amaçlı fonksiyonlar için
 #include <stdbool.h> // Boolean türlerini kullanmak için
 #include <string.h> // String işlemleri için
-#include <sys/stat.h> // Dosya durumunu kontrol etmek için
+#include <sys/stat.h> // Dosya ve dizin durumlarını kontrol etmek için
 #include <unistd.h> // UNIX sistem çağrıları, örn. access() ve remove()
 #include <errno.h> // Hata numaralarını ve hata mesajlarını işlemek için
 
@@ -47,20 +47,27 @@ bool copy(const char *source, const char *dest) {
     return true; // İşlem başarılı
 }
 
-// Taşıma veya yeniden adlandırma işlemi???????????????????????????? silinebilir ????????????????????????
+// Taşıma veya yeniden adlandırma işlemi
 static bool do_move(const char *source, const char *dest) {
-    // 1. `rename` sistem çağrısı
-    if (rename(source, dest) == 0) { // Dosyayı yeniden adlandır veya taşı
-        return true; // İşlem başarılı
-    }
-
-    // 2. Eğer `rename` başarısız olursa, kopyalama işlemi devreye girer
-    if (copy(source, dest)) { // Kaynak dosyayı hedefe kopyala
-        if (remove(source) != 0) { // Kaynak dosyayı sil
-            perror("Source file could not be deleted"); // Hata durumunda mesaj yazdır
+    if (is_directory(source)) { // Eğer kaynak bir dizinse kontrol et
+        if (rename(source, dest) == 0) { // Dizin taşıma/yeniden adlandırma işlemini dene
+            return true; // İşlem başarılı
+        } else {
+            perror("Directory rename failed"); // Hata durumunda mesaj yazdır
             return false; // İşlem başarısız
         }
-        return true; // İşlem başarılı
+    } else { // Eğer kaynak bir dosyaysa
+        if (rename(source, dest) == 0) { // Dosyayı yeniden adlandır veya taşı
+            return true; // İşlem başarılı
+        }
+
+        if (copy(source, dest)) { // Eğer `rename` başarısız olursa dosyayı kopyala
+            if (remove(source) != 0) { // Kaynak dosyayı sil
+                perror("Source file could not be deleted"); // Hata durumunda mesaj yazdır
+                return false; // İşlem başarısız
+            }
+            return true; // İşlem başarılı
+        }
     }
 
     return false; // İşlem başarısız
@@ -72,27 +79,30 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE; // Başarısız çıkış
     }
 
-    const char *source = argv[1]; // Kaynak dosya adı
-    const char *dest = argv[2]; // Hedef dosya adı
+    const char *source = argv[1]; // Kaynak dosya veya dizin adı
+    const char *dest = argv[2]; // Hedef dosya veya dizin adı
 
-    // Kaynak dosyanın varlığını kontrol et
-    if (access(source, F_OK) != 0) { // Dosya yoksa hata döner
-        perror("Source file not found"); // Hata mesajı yazdır
+    if (access(source, F_OK) != 0) { // Kaynak dosya/dizinin varlığını kontrol et
+        perror("Source not found"); // Hata mesajı yazdır
         return EXIT_FAILURE; // Başarısız çıkış
     }
 
-    // Hedef dosyanın üzerine yazmadan önce kontrol
-    if (access(dest, F_OK) == 0) { // Hedef dosya zaten mevcut mu?
-        fprintf(stderr, "Destination file already exists: %s\n", dest); // Hata mesajı
+    if (access(dest, F_OK) == 0) { // Hedef dosya/dizinin varlığını kontrol et
+        fprintf(stderr, "Destination already exists: %s\n", dest); // Hata mesajı
         return EXIT_FAILURE; // Başarısız çıkış
     }
 
-    // Taşıma/yeniden adlandırma işlemini gerçekleştir
-    if (do_move(source, dest)) { // İşlem başarılı mı?
-        printf("File '%s' successfully moved or renamed to '%s'.\n", source, dest); // Başarı mesajı
+    if (is_directory(source)) { // Kaynak bir dizin mi kontrol et
+        printf("Attempting to rename/move directory...\n"); // Bilgilendirme mesajı
+    } else { // Kaynak bir dosya
+        printf("Attempting to rename/move file...\n"); // Bilgilendirme mesajı
+    }
+
+    if (do_move(source, dest)) { // Taşıma veya yeniden adlandırma işlemini gerçekleştir
+        printf("'%s' successfully moved or renamed to '%s'.\n", source, dest); // Başarı mesajı
         return EXIT_SUCCESS; // Başarılı çıkış
     } else {
-        fprintf(stderr, "File could not be moved or renamed.\n"); // Hata mesajı
+        fprintf(stderr, "Operation failed.\n"); // Hata mesajı
         return EXIT_FAILURE; // Başarısız çıkış
     }
 }
